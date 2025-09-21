@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include "shell.h"
 #include "ports.h"
-#include "block.h" // Include the new block layer
+#include "block.h"
 #include "hdd_fs.h"
 
 char *strcpy(char *dest, const char *src) {
@@ -10,6 +10,30 @@ char *strcpy(char *dest, const char *src) {
     while ((*dest++ = *src++));
     return original_dest;
 }
+
+char *strcat(char *dest, const char *src) {
+    char *original_dest = dest;
+    while (*dest) {
+        dest++;
+    }
+    while ((*dest++ = *src++));
+    return original_dest;
+}
+
+// *** MOVED strcmp AND strncmp IMPLEMENTATIONS HERE ***
+int strcmp(const char *a, const char *b) {
+    while (*a && (*a == *b)) { a++; b++; }
+    return (unsigned char)*a - (unsigned char)*b;
+}
+
+int strncmp(const char *a, const char *b, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        if (a[i] != b[i]) return (unsigned char)a[i] - (unsigned char)b[i];
+        if (a[i] == '\0') return 0;
+    }
+    return 0;
+}
+
 
 char *strncpy(char *dest, const char *src, size_t n) {
     size_t i = 0;
@@ -230,11 +254,9 @@ void get_user_input(char* buffer, int max_len) {
     }
 }
 
-// ==== NEW FUNCTION FOR TIMING ====
 void kernel_delay(uint32_t cycles) {
     for (volatile uint32_t i = 0; i < cycles; i++) {
         // This is a simple busy-wait loop.
-        // The value of 'cycles' needs to be tuned for the target machine speed.
     }
 }
 
@@ -244,7 +266,7 @@ void main(void) {
     clear_screen();
 
     print_string("ChucklesOS2 booting...\n");
-    block_init(); // This now handles ATA and SATA probing
+    block_init();
     fs_init();
     new_line();
 
