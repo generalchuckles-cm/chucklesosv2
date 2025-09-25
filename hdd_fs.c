@@ -2,16 +2,8 @@
 #include "block.h"
 #include <stddef.h>
 #include "shell.h"
-
-// Extern declarations
-extern void print_string(const char* str);
-extern void print_int(int n);
-extern void new_line();
-extern char* strncpy(char *dest, const char *src, size_t n);
-extern int strcmp(const char *a, const char *b);
-extern size_t strlen(const char* str);
-extern void* memset(void *s, int c, size_t n);
-extern void print_char(char c);
+#include "stdio.h"
+#include "extrainclude.h"
 
 // *** CORRECTED: Removed 'static' to make this a global definition ***
 FileIndexTable fs_table;

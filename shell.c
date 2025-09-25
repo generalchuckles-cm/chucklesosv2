@@ -4,21 +4,13 @@
 #include "basic.h"
 #include "color.h"
 #include "cdg_player.h"
+#include "graphics.h"
 
 #define BINARY_LOAD_ADDRESS 0x200000
 
-// External kernel functions and variables
-extern void print_string(const char *str);
-extern void print_char(char c);
-extern void print_int(int n);
-extern void new_line(void);
-extern size_t strlen(const char* str);
-extern void clear_screen(void);
-extern char* strcpy(char *dest, const char *src);
-extern char* strcat(char *dest, const char *src);
-extern int strcmp(const char *a, const char *b);
-extern int strncmp(const char *a, const char *b, size_t n);
+// External kernel variables
 extern char input_buffer[];
+extern int IsGraphics; // Get access to the new global state flag
 
 // Extern the file table so `ls` can inspect it directly
 extern FileIndexTable fs_table;
@@ -34,35 +26,25 @@ extern void handle_color_command(const char *args);
 extern void cdg_player_start(const char *filename);
 
 
-// --- REWRITTEN AND CORRECTED PATH AND FS LOGIC ---
+// --- Path and FS Logic ---
 
-// Constructs a proper filesystem path from user input.
-// Root files have no prefix (e.g., "hello.bin").
-// Subdir files have a prefix (e.g., "bin/hello").
 static void get_full_path(char* fullpath_out, const char* path_in) {
-    // If path starts with '/', it's absolute from the root.
     if (path_in[0] == '/') {
-        strcpy(fullpath_out, path_in + 1); // Copy, skipping the leading '/'
+        strcpy(fullpath_out, path_in + 1);
         return;
     }
-
-    // Handle './' prefix by skipping it.
     if (path_in[0] == '.' && path_in[1] == '/') {
         path_in += 2;
     }
-
-    // If CWD is root, the full path is just the relative path.
     if (strcmp(current_working_dir, "/") == 0) {
         strcpy(fullpath_out, path_in);
     } else {
-        // If CWD is a subdir, construct "cwd/path".
-        strcpy(fullpath_out, current_working_dir + 1); // Copy CWD without leading '/'
+        strcpy(fullpath_out, current_working_dir + 1);
         strcat(fullpath_out, "/");
         strcat(fullpath_out, path_in);
     }
 }
 
-// A new, working `ls` command that filters by directory.
 static void handle_ls(const char* args) {
     print_string("--- Listing for ");
     print_string(current_working_dir);
@@ -80,7 +62,6 @@ static void handle_ls(const char* args) {
         const char* name_to_print = NULL;
 
         if (strcmp(current_working_dir, "/") == 0) {
-            // In root: find files with no slashes.
             int has_slash = 0;
             for (int j = 0; entry_name[j] != '\0'; j++) {
                 if (entry_name[j] == '/') {
@@ -92,11 +73,9 @@ static void handle_ls(const char* args) {
                 name_to_print = entry_name;
             }
         } else {
-            // In a subdir (e.g., /bin): find files that start with "bin/"
-            const char* cwd_prefix = current_working_dir + 1; // "bin"
+            const char* cwd_prefix = current_working_dir + 1;
             int prefix_len = strlen(cwd_prefix);
             if (strncmp(entry_name, cwd_prefix, prefix_len) == 0 && entry_name[prefix_len] == '/') {
-                // Check that it's not in a sub-sub-directory
                 const char* remainder = entry_name + prefix_len + 1;
                 int has_more_slashes = 0;
                 for (int j = 0; remainder[j] != '\0'; j++) {
@@ -134,7 +113,7 @@ static void handle_md(const char* args) {
     }
     char full_path[128];
     get_full_path(full_path, args);
-    strcat(full_path, "/"); // All directories must end in a slash
+    strcat(full_path, "/");
     if (fs_write_file(full_path, "", 0) != 0) {
         print_string("Error creating directory.\n");
     }
@@ -149,18 +128,41 @@ static void handle_cd(const char* args) {
     if (strcmp(args, "..") == 0) {
         if (strcmp(current_working_dir, "/") == 0) return;
         int len = strlen(current_working_dir);
-        for (int i = len - 1; i > 0; i--) {
+        // Go back to the last slash
+        for (int i = len - 2; i > 0; i--) {
             if (current_working_dir[i] == '/') {
-                current_working_dir[i] = '\0';
-                break;
+                current_working_dir[i + 1] = '\0';
+                return;
             }
         }
+        // If no other slash found, go to root
+        strcpy(current_working_dir, "/");
     } else {
         char new_path[128];
         get_full_path(new_path, args);
-        // We could check if dir exists, but for now we trust the user
-        strcpy(current_working_dir, "/");
-        strcat(current_working_dir, new_path);
+        
+        // We need to verify the directory exists.
+        // We do this by checking if a file entry for "new_path/" exists.
+        char temp_path[130];
+        strcpy(temp_path, new_path);
+        strcat(temp_path, "/");
+        
+        int found = 0;
+        for (int i = 0; i < MAX_FILES; i++) {
+            if (strcmp(fs_table.entries[i].filename, temp_path) == 0) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (found) {
+            strcpy(current_working_dir, "/");
+            strcat(current_working_dir, new_path);
+        } else {
+            print_string("Directory not found: ");
+            print_string(args);
+            new_line();
+        }
     }
 }
 
@@ -179,24 +181,43 @@ void process_command() {
     }
 
     if (strcmp(command, "help") == 0) {
-        new_line(); print_string("System: help, ver, cls, echo, mr, color, info\n");
+        new_line();
+        print_string("System: help, cls, mr, color, graphics, textmode\n");
         print_string("FS:     ls, cd, md, read, write, format\n");
-        print_string("Apps:   snake, basic, cdg\n");
-        print_string("Run programs by path (e.g., /bin/prog or ./prog)\n");
+        print_string("Apps:   snake, basic, cdg (graphical)\n");
     } else if (strcmp(command, "cls") == 0) {
         clear_screen();
+    } else if (strcmp(command, "graphics") == 0) {
+        if (IsGraphics) {
+            print_string("Already in graphics mode.\n");
+        } else {
+            set_graphics_mode();
+            IsGraphics = 1;
+            g_init();
+            print_string("Switched to graphics mode shell.\n");
+            print_string("Type 'textmode' to return.\n");
+        }
+    } else if (strcmp(command, "textmode") == 0) {
+        if (!IsGraphics) {
+            print_string("Already in text mode.\n");
+        } else {
+            set_text_mode();
+            IsGraphics = 0;
+            clear_screen();
+            print_string("Switched to legacy text mode.\n");
+        }
     } else if (strcmp(command, "ls") == 0) {
         handle_ls(args);
     } else if (strcmp(command, "cd") == 0) {
         handle_cd(args);
-    } else if (strcmp(command, "md") == 0) {
+    } else if (strcmp(command, "md") == 0 || strcmp(command, "mkdir") == 0) {
         handle_md(args);
-    } else if (strcmp(command, "read") == 0) {
+    } else if (strcmp(command, "read") == 0 || strcmp(command, "cat") == 0) {
         new_line(); char p[128]; get_full_path(p, args);
         int bytes = fs_read_file(p, hdd_file_buffer);
         if (bytes >= 0) { print_string(hdd_file_buffer); new_line(); }
         else { print_string("Error reading file.\n"); }
-    } else if (strcmp(command, "write") == 0) {
+    } else if (strcmp(command, "write") == 0 || strcmp(command, "wr") == 0) {
         new_line(); char* fn = args; char* data = NULL;
         for (int i = 0; args[i] != '\0'; i++) {
             if (args[i] == ' ') { args[i] = '\0'; data = &args[i+1]; break; }
@@ -204,11 +225,27 @@ void process_command() {
         if (data) { char p[128]; get_full_path(p, fn);
             if (fs_write_file(p, data, strlen(data))==0) print_string("OK\n"); else print_string("Error.\n");
         } else { print_string("Usage: write <file> <data>\n"); }
-    }
-    // ... other built-in commands like snake, basic, etc. can be placed here ...
-    else {
+    } else if (strcmp(command, "format") == 0) {
+        fs_format_disk();
+    } else if (strcmp(command, "snake") == 0) {
+        snake_game();
+    } else if (strcmp(command, "basic") == 0) {
+        basic_start();
+    } else if (strcmp(command, "color") == 0) {
+        handle_color_command(args);
+    } else if (strcmp(command, "mr") == 0) {
+        mem_read_command(args);
+    } else if (strcmp(command, "cdg") == 0) {
+        if (*args == '\0') {
+            print_string("Usage: cdg <filename>\n");
+        } else {
+            char p[128];
+            get_full_path(p, args);
+            cdg_player_start(p);
+        }
+    } else {
         char full_path[128];
-        get_full_path(full_path, command); // This now builds the correct path
+        get_full_path(full_path, command);
         
         int bytes_read = fs_read_file(full_path, (char*)BINARY_LOAD_ADDRESS);
 

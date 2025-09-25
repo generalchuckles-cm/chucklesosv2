@@ -1,1 +1,8 @@
 disk.img
+*.zip
+build/
+chuckleslang/
+*.iso
+*.elf
+*.bin
+demo.c

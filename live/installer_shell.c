@@ -3,15 +3,8 @@
 #include "block.h"
 #include <stddef.h>
 #include <stdint.h>
-
-extern void print_string(const char *str);
-extern void print_int(int n);
-extern void new_line(void);
-extern void clear_screen(void);
-extern void get_user_input(char* buffer, int max_len);
-extern void* memset(void* s, int c, size_t n);
-extern int strcmp(const char *a, const char *b);
-extern size_t strlen(const char* str);
+#include "stdio.h"
+#include "extrainclude.h"
 
 static inline void hlt(void) {
     __asm__ volatile ("hlt");

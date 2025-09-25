@@ -1,8 +1,8 @@
 #include "basic.h"
 #include "hdd_fs.h" // For SAVE/LOAD
 #include <stddef.h> // For NULL
-
-
+#include "stdio.h"
+#include "extrainclude.h"
 
 
 // --- External OS Functions ---
