@@ -23,7 +23,11 @@ FINAL_OS_ELF      := $(BIN_DIR)/kernel.elf
 INSTALLER_ELF     := $(BIN_DIR)/installer_kernel.elf
 
 # ==== COMPILER FLAGS ====
-CFLAGS        := -m32 -ffreestanding -O2 -I.
+CFLAGS        := -m32 -ffreestanding -O2 -I. \
+               -Wno-error=implicit-function-declaration \
+               -fno-stack-protector \
+               -mno-red-zone -mno-sse -mno-mmx
+
 
 # ==== COLOR ====
 GREEN  := \033[1;32m
